@@ -30,13 +30,18 @@ The below commands are for Ubuntu 18.04 and ROS Melodic. If you are using Ubuntu
 
 The official build system of ROS is called catkin. One needs a catkin workspace to build and run ROS packages.
 
-- `mkdir -p catkin_ws/src`
-- `cd catkin_ws`
+- `mkdir -p ~/catkin_ws/src`
+- `cd ~/catkin_ws`
 - `catkin init`
 - `wstool init src`
-- `git clone https://github.com/esl-sun/px4_nav_cmd.git`
-- `rm -rf src`
-- `mv px4_nav_cmd src`
+
+The ROS packages should be in the `src` directory. We recommend to clone the ESL ROS Library contents to another folder and symlink the needed packages in the `src` directory.
+
+- `mkdir -p ~/esl-sun`
+- `cd ~/esl-sun`
+- `git clone https://github.com/esl-sun/esl_ros_lib.git`
+- `cd ~/catkin_ws`
+- `ln -s ~/esl-sun/esl_ros_lib/px4_nav_cmd src/` (`px4_nav_cmd` is an example of a ROS package, one can symlink all the needed ROS packages here)
 - `catkin build`
 - `source devel/setup.bash`
 
@@ -47,7 +52,7 @@ The official build system of ROS is called catkin. One needs a catkin workspace 
 - Open another terminal and start MAVROS:
   - `roslaunch mavros px4.launch fcu_url:="udp://:14540@127.0.0.1:14557"`
 - Open another terminal and run one of the ROS nodes in the catkin workspace directory, for example:
-  - `rosrun mc_step_input mc_step_input.py -t z -v 10 -d 10` (Step to 10m)
+  - `rosrun px4_nav_cmd mc_step_input.py -t z -v 10 -d 10` (Step to 10m)
 
 ## ESL ROS Library Packages
 
@@ -58,7 +63,7 @@ The official build system of ROS is called catkin. One needs a catkin workspace 
 Execute step inputs to the different multicopter controllers, such as angular rate, angle, linear velocity and position. One can then analyze the step response to determine whether the respective controllers meet the specifications.
 
 For help on how to use the ROS node, run the following:
-- `rosrun mc_step_input mc_step_input.py --help`
+- `rosrun px4_nav_cmd mc_step_input.py --help`
 
 #### PX4 Waypoint Scheduler (waypoint_scheduler)
 
@@ -70,4 +75,4 @@ At the top of the script, there are 3 variables one can change.
 - waypoint_time: if < 0, will send next waypoint when current one is reached. if >= 0, will send next waypoint after the amount of time has passed
 
 To run the node, execute the following:
-- `rosrun waypoint_scheduler`
+- `rosrun px4_nav_cmd waypoint_scheduler.py`

@@ -17,36 +17,35 @@ import time, sys, math
 # Global variables
 # Waypoints = [N, E, D, Yaw (deg)]
 waypoints = [
-             [0, 0, 0, 0],
-             [0, 0, 2, 0],
-             [16, 0, 2, 0],
-             [16, 12, 2, 0],
-             [16, 0, 2, 0],
-             [8, 0, 2, 0],
-             [8, 8, 2, 0],
-             [8, 0, 2, 0],
-             [0, 0, 2, 0],
+                [0, 0, 2, 0],
+                [16, 0, 2, 0],
+                [16, 12, 2, 0],
+                [16, 0, 2, 0],
+                [8, 0, 2, 0],
+                [8, 8, 2, 0],
+                [8, 0, 2, 0],
+                [0, 0, 2, 0],
 
-             [0, 22, 2, 0],
+                [0, 22, 2, 0],
 
-             [4, 26, 2, 0],
-             [8, 22, 2, 0],
-             [8, 18, 2, 0],
-             [12, 14, 2, 0],
-             [16, 18, 2, 0],
+                [4, 26, 2, 0],
+                [8, 22, 2, 0],
+                [8, 18, 2, 0],
+                [12, 14, 2, 0],
+                [16, 18, 2, 0],
 
-             [16, 30, 2, 0],
+                [16, 30, 2, 0],
 
-             [0, 30, 2, 0],
-             [0, 42, 2, 0],
+                [0, 30, 2, 0],
+                [0, 42, 2, 0],
             ]
 # Should the waypoints be relative from the initial position (except yaw)?
-relative = True
+relative = False
 # Threshold: How small the error should be before sending the next waypoint
 threshold = 0.2
  # If waypoint_time < 0, will send next waypoint when current one is reached.
  # If waypoint_time >= 0, will send next waypoint after the amount of time has passed.
-waypoint_time = 20
+waypoint_time = -1
  # If autonomous is True, this node will automatically arm, switch to OFFBOARD mode, fly and land.
  # If it is False, it waits for the pilot to switch to OFFBOARD mode to fly and does not land.
 autonomous = False
@@ -206,11 +205,16 @@ def run(argv):
     current_wp = 0
     last_time = time.time()
     print("Following waypoints...")
+    print("Executing waypoint %d / %d" % (current_wp + 1, len(waypoints)))
     while current_wp < len(waypoints) and not rospy.is_shutdown():
         y = init_pos.y + waypoints[current_wp][0]
         x = init_pos.x + waypoints[current_wp][1]
         z = init_pos.z + waypoints[current_wp][2]
         yaw = waypoints[current_wp][3]
+
+        cnt.updateSp(init_pos.y + waypoints[current_wp][0], init_pos.x + waypoints[current_wp][1], -init_pos.z - waypoints[current_wp][2], waypoints[current_wp][3])
+        publish_setpoint(cnt, sp_pos_pub)
+        rate.sleep()
 
         if waypoint_time < 0:
             if targetReached(x, cnt.local_pos.x, threshold) and targetReached(0, cnt.local_vel.x, threshold) and \
@@ -219,17 +223,15 @@ def run(argv):
                targetReached(yaw, cnt.local_yaw, threshold):
                 
                 current_wp = current_wp + 1
-                print("Executing waypoint %d / %d" % (current_wp + 1, len(waypoints)))
+                if current_wp < len(waypoints):
+                    print("Executing waypoint %d / %d" % (current_wp + 1, len(waypoints)))
         else:
             current_time = time.time()
             if current_time - last_time >= waypoint_time:
                 current_wp = current_wp + 1
-                print("Executing waypoint %d / %d" % (current_wp + 1, len(waypoints)))
+                if current_wp < len(waypoints):
+                    print("Executing waypoint %d / %d" % (current_wp + 1, len(waypoints)))
                 last_time = current_time
-
-        cnt.updateSp(init_pos.y + waypoints[current_wp][0], init_pos.x + waypoints[current_wp][1], -init_pos.z - waypoints[current_wp][2], waypoints[current_wp][3])
-        publish_setpoint(cnt, sp_pos_pub)
-        rate.sleep()
     print("Last waypoint reached\n")
 
     if autonomous:

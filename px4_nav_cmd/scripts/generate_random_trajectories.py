@@ -157,6 +157,23 @@ def generateExpoInput(responseDuration,startInput,minInput,maxInput):
                 break
     return input
 
+
+def generateZeroInput(signal):
+
+    lenght_of_signal = len(signal)
+    timestep = 0
+
+    while timestep < lenght_of_signal:
+
+        unchangeDur = int(lenght_of_signal/20*(np.random.random() ) ) # No changes to duration
+        zeroInputDur = int(lenght_of_signal/20*(np.random.random()) ) # Duration of zero input
+
+        timestep += unchangeDur
+        signal[timestep:timestep+zeroInputDur] = signal[timestep:timestep+zeroInputDur]*0
+        timestep += zeroInputDur
+
+    return signal
+
 def generateNoiseInput(responseDuration,startInput,minInput,maxInput):
 
     input = np.zeros( (responseDuration,1) )
@@ -168,11 +185,15 @@ def addNoise(response,level):
     response += np.random.random((sizeOfArray,1))/level
     return response
 
+
+
 def generateCombinationInput(responseDuration,startInput,minInput,maxInput):
     input1 = generateStepInput(responseDuration,startInput,minInput/4,maxInput/4)
     input2 = generateRampInput(responseDuration,startInput,minInput/4,maxInput/4)
     input3 = generateExpoInput(responseDuration,startInput,minInput/4,maxInput/4)
     input4 = generateSquareInput(responseDuration,startInput,minInput/4,maxInput/4)
+
     input = input1+input2+input3+input4
-    # input = addNoise(input1+input2+input3+input4,0.5)
+    input = generateZeroInput(input)
+    
     return input

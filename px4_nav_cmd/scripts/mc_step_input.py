@@ -17,6 +17,7 @@ import argparse
 # import other system/utils
 import time, sys, math
 
+
 # Constants
 ALL_STEP_TYPES = ["pitch_rate", "roll_rate", "yaw_rate", "pitch", "roll", "yaw", "vn", "ve", "vd", "n", "e", "d"]
 INDEX_PITCH_RATE = 0
@@ -34,192 +35,14 @@ INDEX_D = 11
 INDICES_ATTITUDE = [INDEX_PITCH_RATE, INDEX_ROLL_RATE, INDEX_YAW_RATE, INDEX_PITCH, INDEX_ROLL, INDEX_YAW]
 INDICES_POSITION = [INDEX_VN, INDEX_VE, INDEX_VD, INDEX_N, INDEX_E, INDEX_D]
 
-# Global variables
 
-# Flight modes class
-# Flight modes are activated using ROS services
-class FlightModes:
-    def __init__(self):
-        pass
+#Import Classes
+from FlightModes import FlightModes
+from FlightParameter import FlightParams
+from controller import Controller
 
-    def setArm(self):
-        rospy.wait_for_service('mavros/cmd/arming')
-        try:
-            armService = rospy.ServiceProxy('mavros/cmd/arming', mavros_msgs.srv.CommandBool)
-            armService(True)
-        except rospy.ServiceException, e:
-            print "Service arming call failed: %s"%e
-
-    def setOffboardMode(self):
-        rospy.wait_for_service('mavros/set_mode')
-        try:
-            flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
-            flightModeService(custom_mode='OFFBOARD')
-        except rospy.ServiceException, e:
-            print "service set_mode call failed: %s. Offboard Mode could not be set."%e
-
-    def setLandMode(self):
-        rospy.wait_for_service('mavros/set_mode')
-        try:
-            flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
-            flightModeService(custom_mode='AUTO.LAND')
-        except rospy.ServiceException, e:
-            print "service set_mode call failed: %s. Land Mode could not be set."%e
-
-# Flight parameters class
-# Flight parameters are activated using ROS services
-class FlightParams:
-    def __init__(self):
-        # pull all parameters
-        # rospy.wait_for_service('mavros/param/pull')
-        pulled = False
-        while not pulled:
-            try:
-                paramService = rospy.ServiceProxy('mavros/param/pull', mavros_msgs.srv.ParamPull)
-                parameters_recv = paramService(True)
-                pulled = parameters_recv.success
-            except rospy.ServiceException, e:
-                print "service param_pull call failed: %s. Could not retrieve parameter list."%e
-
-    def getTakeoffHeight(self):
-        return rospy.get_param('mavros/param/MIS_TAKEOFF_ALT')
-
-    def getHoverThrust(self):
-        return rospy.get_param('mavros/param/MPC_THR_HOVER')
 
 # Offboard controller for sending setpoints
-class Controller:
-    def __init__(self):
-        # Drone state
-        self.state = State()
-
-        # A Message for the current local position of the drone
-        self.local_pos = Point(0.0, 0.0, 0.0)
-
-        # A Message for the current linear velocity of the drone
-        self.local_vel = Vector3(0.0, 0.0, 0.0)
-
-        # A Message for the current attitude of the drone
-        self.quat = Quaternion(0.0, 0.0, 0.0, 1.0)
-
-        # A Message for the current angular rate of the drone
-        self.ang_rate = Vector3(0.0, 0.0, 0.0)
-
-        # Instantiate the position setpoint message
-        self.pos_sp = PositionTarget()
-        # set the flag to control height
-        self.pos_sp.type_mask = int('110111111000', 2)
-        # LOCAL_NED
-        self.pos_sp.coordinate_frame = 1
-        # initial values for setpoints
-        self.pos_sp.position.x = 0.0
-        self.pos_sp.position.y = 0.0
-        self.pos_sp.position.z = 0.0
-
-        # Instantiate the attitude setpoint message
-        self.att_sp = AttitudeTarget()
-        # set the default flag
-        self.att_sp.type_mask = int('11000111', 2)
-        # initial values for setpoints
-        self.att_sp.orientation.w = 1.0
-        self.att_sp.orientation.x = 0.0
-        self.att_sp.orientation.y = 0.0
-        self.att_sp.orientation.z = 0.0
-
-        # Obtain flight parameters
-        params = FlightParams()
-        self.takeoffHeight = params.getTakeoffHeight()
-        self.hoverThrust = params.getHoverThrust()
-
-        # Set initial yaw angle to unknown
-        self.init_yaw = None
-
-    # Update setpoint message
-    def updateSp(self, step_type, step_val):
-        # Set default values
-        self.pos_sp.position.x = 0
-        self.pos_sp.position.y = 0
-        self.pos_sp.position.z = self.takeoffHeight
-
-        self.pos_sp.velocity.x = 0
-        self.pos_sp.velocity.y = 0
-        self.pos_sp.velocity.z = 0
-
-        self.att_sp.orientation = Quaternion(*quaternion_from_euler(0.0, 0.0, math.radians(90 + self.init_yaw)))
-
-        self.att_sp.body_rate.x = 0
-        self.att_sp.body_rate.y = 0
-        self.att_sp.body_rate.z = 0
-
-        self.att_sp.thrust = self.hoverThrust
-
-        # Set step value
-        if ALL_STEP_TYPES.index(step_type) == INDEX_VN:
-            self.pos_sp.velocity.y = step_val
-        elif ALL_STEP_TYPES.index(step_type) == INDEX_VE:
-            self.pos_sp.velocity.x = step_val
-        elif ALL_STEP_TYPES.index(step_type) == INDEX_VD:
-            self.pos_sp.velocity.z = -step_val
-        elif ALL_STEP_TYPES.index(step_type) == INDEX_N:
-            self.pos_sp.position.y = step_val
-        elif ALL_STEP_TYPES.index(step_type) == INDEX_E:
-            self.pos_sp.position.x = step_val
-        elif ALL_STEP_TYPES.index(step_type) == INDEX_D:
-            self.pos_sp.position.z = -step_val
-        elif ALL_STEP_TYPES.index(step_type) == INDEX_ROLL_RATE:
-            self.att_sp.body_rate.x = math.radians(step_val)
-        elif ALL_STEP_TYPES.index(step_type) == INDEX_PITCH_RATE:
-            self.att_sp.body_rate.y = math.radians(step_val)
-        elif ALL_STEP_TYPES.index(step_type) == INDEX_YAW_RATE:
-            self.att_sp.body_rate.z = math.radians(step_val)
-        elif ALL_STEP_TYPES.index(step_type) == INDEX_ROLL:
-            self.att_sp.orientation = Quaternion(*quaternion_from_euler(math.radians(step_val), 0.0, math.radians(90 + self.init_yaw)))
-        elif ALL_STEP_TYPES.index(step_type) == INDEX_PITCH:
-            self.att_sp.orientation = Quaternion(*quaternion_from_euler(0.0, math.radians(step_val), math.radians(90 + self.init_yaw)))
-        elif ALL_STEP_TYPES.index(step_type) == INDEX_YAW:
-            self.att_sp.orientation = Quaternion(*quaternion_from_euler(0.0, 0.0, math.radians(90 + step_val)))
-
-        # Set mask
-        if ALL_STEP_TYPES.index(step_type) in [INDEX_VN, INDEX_VE, INDEX_VD]:
-            self.pos_sp.type_mask = int('110111000111', 2)
-        elif ALL_STEP_TYPES.index(step_type) in [INDEX_N, INDEX_E, INDEX_D]:
-            self.pos_sp.type_mask = int('110111111000', 2) 
-        elif ALL_STEP_TYPES.index(step_type) in [INDEX_PITCH_RATE, INDEX_ROLL_RATE, INDEX_YAW_RATE]:
-            self.att_sp.type_mask = int('10111000', 2)
-        elif ALL_STEP_TYPES.index(step_type) in [INDEX_PITCH, INDEX_ROLL, INDEX_YAW]:
-            self.att_sp.type_mask = int('00111111', 2)           
-
-    # Callbacks.
-
-    ## Drone State callback
-    def stateCb(self, msg):
-        self.state = msg
-
-    ## Drone local position callback
-    def posCb(self, msg):
-        self.local_pos.x = msg.pose.position.x
-        self.local_pos.y = msg.pose.position.y
-        self.local_pos.z = msg.pose.position.z
-
-        self.quat.w = msg.pose.orientation.w
-        self.quat.x = msg.pose.orientation.x
-        self.quat.y = msg.pose.orientation.y
-        self.quat.z = msg.pose.orientation.z
-
-        # Set initial yaw angle
-        if self.init_yaw is None:
-            self.init_yaw = -90 + math.degrees(euler_from_quaternion([self.quat.x, self.quat.y, self.quat.z, self.quat.w])[2])
-
-    ## Drone linear velocity callback
-    def velCb(self, msg):
-        self.local_vel.x = msg.twist.linear.x
-        self.local_vel.y = msg.twist.linear.y
-        self.local_vel.z = msg.twist.linear.z
-
-        self.ang_rate.x = msg.twist.angular.x
-        self.ang_rate.y = msg.twist.angular.y
-        self.ang_rate.z = msg.twist.angular.z
-
 def publish_setpoint(cnt, step_type, pub_pos, pub_att):
     if ALL_STEP_TYPES.index(step_type) in [INDEX_VN, INDEX_VE, INDEX_VD, INDEX_N, INDEX_E, INDEX_D]:
         pub_pos.publish(cnt.pos_sp)
@@ -237,6 +60,7 @@ def run(argv):
     args = parser.parse_args()
     if args.type != None and args.value != None:
         step_type = str(args.type[0])
+        print(step_type)
         value = args.value[0]
     else:
         print("Please provide a step type and a step final value")
@@ -274,7 +98,7 @@ def run(argv):
     # Subscribe to drone's linear velocity
     rospy.Subscriber('mavros/local_position/velocity', TwistStamped, cnt.velCb)
 
-    # Setpoint publishers   
+    # Setpoint publishers
     sp_pos_pub = rospy.Publisher('mavros/setpoint_raw/local', PositionTarget, queue_size=1)
     sp_att_pub = rospy.Publisher('mavros/setpoint_raw/attitude', AttitudeTarget, queue_size=1)
 
@@ -305,10 +129,11 @@ def run(argv):
         cnt.updateSp(ALL_STEP_TYPES[INDEX_D], -cnt.takeoffHeight)
         sp_pos_pub.publish(cnt.pos_sp)
         rate.sleep()
-    print("Reached takeoff height")
+    print("Reached takeoff height of " + str(cnt.takeoffHeight) + "m")
 
     # Start and end the step at 0. Well, really close to 0...
     final_val = 1e-6
+    # If step input is in D Direction
     if ALL_STEP_TYPES.index(step_type) == INDEX_D:
         final_val = -cnt.takeoffHeight
     elif ALL_STEP_TYPES.index(step_type) == INDEX_YAW:
@@ -317,11 +142,14 @@ def run(argv):
     # ROS main loop - first set value to zero before stepping
     zero_time = 5
     start = time.time()
+    print("Holding position for 5 seconds")
     while not ((time.time() - start >= duration + zero_time) or rospy.is_shutdown()):
         if time.time() - start <= zero_time:
             cnt.updateSp(step_type, final_val)
         else:
             cnt.updateSp(step_type, value)
+            sys.stdout.write("Executing progress: %d%%   \r" % ( ((time.time()-start)/(2*duration+2*zero_time))*100 ))
+            sys.stdout.flush()
         publish_setpoint(cnt, step_type, sp_pos_pub, sp_att_pub)
         rate.sleep()
 
@@ -329,11 +157,13 @@ def run(argv):
     start = time.time()
     while not ((time.time() - start >= duration) or rospy.is_shutdown()):
         cnt.updateSp(step_type, final_val)
+        sys.stdout.write("Executing progress: %d%%   \r" % ( ( (time.time()-start) / (2*duration)+0.5)*100))
+        sys.stdout.flush()
         publish_setpoint(cnt, step_type, sp_pos_pub, sp_att_pub)
         rate.sleep()
 
     # Land quadrotor
-    print("Activate LAND mode")
+    print("\n\nActivate LAND mode\n")
     while not (cnt.state.mode == "AUTO.LAND" or rospy.is_shutdown()):
         modes.setLandMode()
         rate.sleep()
